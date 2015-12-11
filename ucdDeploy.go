@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
+	"log")
 	"net/http"
 	"os"
 )
@@ -57,7 +57,7 @@ func main() {
 	if len(description) > 0 {
 		bodyMap["description"] = description
 	}
-	bodyMap["version"] = versionArray
+	bodyMap["versions"] = versionArray
 
 	jsonIn, _ := json.Marshal(bodyMap)
 	fmt.Println(string(jsonIn))
