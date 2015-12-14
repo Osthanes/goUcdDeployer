@@ -3,11 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
@@ -43,7 +43,7 @@ func main() {
 		log.Fatal("COMPONENT_ID is not set")
 	}
 
-	fmt.Printf("Starting http calls for %s %s\n", component_id, version)
+	log.Printf("Starting http calls for %s %s\n", component_id, version)
 
 	bodyMap := make(map[string]interface{})
 	versionArray := [1]map[string]string{
@@ -60,25 +60,75 @@ func main() {
 	bodyMap["versions"] = versionArray
 
 	jsonIn, _ := json.Marshal(bodyMap)
-	fmt.Println(string(jsonIn))
+	log.Println(string(jsonIn))
 
 	client := &http.Client{}
 	request, err := http.NewRequest("PUT", ucd_url+"/cli/applicationProcessRequest/request", bytes.NewReader(jsonIn))
+	if err != nil {
+		log.Fatal(err)
+	}
 	request.SetBasicAuth(ucd_user, ucd_password)
 	response, err := client.Do(request)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(response.Status)
-	fmt.Println(response.StatusCode)
+	log.Println(response.Status)
+	log.Println(response.StatusCode)
 	defer response.Body.Close()
 	contents, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(string(contents))
 	if response.StatusCode >= 400 {
+		log.Println(string(contents))
 		log.Fatal(response.Status)
+	}
+
+	requestBody := make(map[string]string)
+
+	log.Println(string(contents))
+	err = json.Unmarshal(contents, &requestBody)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var status string
+	var result string
+
+	for count := 0; status != "CLOSED" && count < 30; count++ {
+		if count > 0 {
+			time.Sleep(10 * time.Second)
+		}
+		request, err = http.NewRequest("GET", ucd_url+"/cli/applicationProcessRequest/requestStatus?request="+requestBody["requestId"], nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println(request.URL)
+		request.SetBasicAuth(ucd_user, ucd_password)
+		requestResp, err := client.Do(request)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Println(requestResp.Status)
+		log.Println(requestResp.StatusCode)
+
+		defer requestResp.Body.Close()
+		contents, err = ioutil.ReadAll(requestResp.Body)
+		log.Println(string(contents))
+
+		requestStatus := make(map[string]string)
+
+		err = json.Unmarshal(contents, &requestStatus)
+		if err != nil {
+			log.Fatal(err)
+		}
+		status = requestStatus["status"]
+		result = requestStatus["result"]
+	}
+	if result != "SUCCEEDED" {
+		log.Fatal("Request has not succeeded.  Status: " + status + ", result: " + result)
 	}
 	return
 }
